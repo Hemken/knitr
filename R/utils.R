@@ -307,6 +307,12 @@ fix_options = function(options) {
     }
   }
 
+  if (options$collapse) {
+    options[unlist(lapply(
+      c('class.', 'attr.'), paste0, c('output', 'message', 'warning', 'error')
+    ))] = NULL
+  }
+
   options
 }
 
@@ -359,7 +365,10 @@ latex_percent_size = function(x, which = c('width', 'height')) {
   xi = as.numeric(sub('%$', '', x[i]))
   if (any(is.na(xi))) return(x)
   which = match.arg(which)
-  x[i] = paste0(xi / 100, if (which == 'width') '\\linewidth' else '\\textheight')
+  x[i] = paste0(
+    formatC(xi / 100, decimal.mark = '.'),
+    if (which == 'width') '\\linewidth' else '\\textheight'
+  )
   x
 }
 
@@ -603,13 +612,7 @@ read_rforge = function(path, project, extra = '') {
   read_utf8(sprintf('%s/%s?root=%s%s', base, path, project, extra))
 }
 
-# TODO: just import xfun::split_lines()
-split_lines = function(x) {
-  if (length(grep('\n', x)) == 0L) return(x)
-  x = gsub('\n$', '\n\n', x)
-  x[x == ''] = '\n'
-  unlist(strsplit(x, '\n'))
-}
+split_lines = function(x) xfun::split_lines(x)
 
 # if a string is encoded in UTF-8, convert it to native encoding
 native_encode = function(x, to = '') {
@@ -718,6 +721,8 @@ kpsewhich = function() {
 has_utility = function(name, package = name) {
   name2 = paste('util', name, sep = '_')  # e.g. util_pdfcrop
   if (is.logical(yes <- opts_knit$get(name2))) return(yes)
+  # a special case: use tools::find_gs_cmd() to find ghostscript
+  if (name == 'ghostscript') name = tools::find_gs_cmd()
   yes = nzchar(Sys.which(name))
   if (!yes) warning(package, ' not installed or not in PATH')
   opts_knit$set(setNames(list(yes), name2))
@@ -766,10 +771,24 @@ knit_handlers = function(fun, options) {
   }))
 }
 
+# TODO: the following functions have been moved to xfun
 # conditionally disable some features during R CMD check
 is_R_CMD_check = function() {
-  ('CheckExEnv' %in% search()) ||
-    any(c('_R_CHECK_TIMINGS_', '_R_CHECK_LICENSE_') %in% names(Sys.getenv()))
+  !is.na(check_package_name())
+}
+
+is_CRAN_incoming = function() {
+  isTRUE(as.logical(Sys.getenv('_R_CHECK_CRAN_INCOMING_REMOTE_')))
+}
+
+check_package_name = function() {
+  Sys.getenv('_R_CHECK_PACKAGE_NAME_', NA)
+}
+
+# is R CMD check running on a package that has a version lower or equal to `version`?
+check_old_package = function(name, version) {
+  if (is.na(pkg <- check_package_name()) || pkg != name) return(FALSE)
+  tryCatch(packageVersion(name) <= version, error = function(e) FALSE)
 }
 
 # is the inst dir under . or ..? differs in R CMD build/INSTALL and devtools/roxygen2
@@ -794,7 +813,7 @@ create_label = function(..., latex = FALSE) {
   } else {
     return('')  # we don't want the label at all
   }
-  paste0(lab1, ..., lab2)
+  paste(c(lab1, ..., lab2), collapse = '')
 }
 
 #' Combine multiple words into a single string
@@ -984,3 +1003,19 @@ make_unique = function(x) {
   s = ifelse(is.na(s), i, s)
   paste0(x, s)
 }
+
+#' Encode an image file to a data URI
+#'
+#' This function is the same as \code{xfun::\link{base64_uri}()} (only with a
+#' different function name). It can encode an image file as a base64 string,
+#' which can be used in the \code{img} tag in HTML.
+#' @param f Path to the image file.
+#' @return The data URI as a character string.
+#' @author Wush Wu and Yihui Xie
+#' @export
+#' @references \url{https://en.wikipedia.org/wiki/Data_URI_scheme}
+#' @examples uri = image_uri(file.path(R.home('doc'), 'html', 'logo.jpg'))
+#' if (interactive()) {cat(sprintf('<img src="%s" />', uri), file = 'logo.html')
+#' browseURL('logo.html') # you can check its HTML source
+#' }
+image_uri = function(f) xfun::base64_uri(f)
