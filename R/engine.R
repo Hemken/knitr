@@ -94,7 +94,7 @@ engine_output = function(options, code, out, extra = NULL) {
   )
   if (options$engine == 'stata') {
     out = gsub('\n+running.*profile.do', '', out)
-    out = sub('...\n+', '', out)
+    out = sub('\\.\\.\\.\n+', '', out)
     out = sub('\n. \nend of do-file\n', '', out)
   }
   one_string(c(
